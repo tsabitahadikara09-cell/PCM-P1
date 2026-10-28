@@ -6,7 +6,11 @@ Jalankan:  python -m streamlit run app_revisi.py
 import io
 import math
 import textwrap
+import zipfile
+import hashlib
 from pathlib import Path
+
+from PIL import Image
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -379,25 +383,27 @@ def mean_scratch(kelas):
 # Halaman-halaman (sesuai bagian pada notebook)
 # ============================================================================
 def sec_data():
-    header("1 · Data & Contoh Citra", "Satu citra pertama dari setiap kelas penyakit pada train set DermaMNIST.")
+    header("1 · Data & Contoh Citra", "Pratinjau citra yang diunggah atau sampel dataset yang dipilih.")
     contoh = next(iter(SAMPEL.values()))
     m = st.columns(4)
-    m[0].metric("Jumlah kelas", len(SAMPEL))
-    m[1].metric("Ukuran citra", f"{contoh.shape[0]} × {contoh.shape[1]}")
-    m[2].metric("Channel warna", contoh.shape[2])
+    m[0].metric("Jumlah citra", len(SAMPEL))
+    m[1].metric("Ukuran citra pertama", f"{contoh.shape[0]} × {contoh.shape[1]}")
+    m[2].metric("Channel warna", contoh.shape[2] if contoh.ndim == 3 else 1)
     m[3].metric("Tipe data", str(contoh.dtype))
-    fig, axes = plt.subplots(2, 4, figsize=(18, 10))
-    axes = axes.ravel()
-    for ax, (k, img) in zip(axes, SAMPEL.items()):
+    ncols = min(4, len(SAMPEL))
+    nrows = int(np.ceil(len(SAMPEL) / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.8 * nrows), squeeze=False)
+    for ax, (k, img) in zip(axes.ravel(), SAMPEL.items()):
         ax.imshow(img)
-        ax.set_title(f"Kelas {k}\n{NAMA[str(k)]}", fontsize=11)
-    for ax in axes:
+        ax.set_title(f"Citra {k}\n{NAMA[str(k)]}", fontsize=9)
         ax.axis("off")
-    fig.suptitle("Contoh Citra Setiap Kelas Penyakit (DermaMNIST)", fontsize=15, fontweight="bold")
-    fig.tight_layout(rect=[0, 0, 1, 0.96], h_pad=2.5)
+    for ax in axes.ravel()[len(SAMPEL):]:
+        ax.axis("off")
+    fig.suptitle("Pratinjau Citra untuk Analisis", fontsize=15, fontweight="bold")
+    fig.tight_layout(rect=[0, 0, 1, 0.97], h_pad=1.8)
     show(fig)
-    st.dataframe(pd.DataFrame([{"Kelas": k, "Nama kelas": NAMA[str(k)], "dtype": str(i.dtype), "shape": str(i.shape),
-                                "min": int(i.min()), "max": int(i.max())} for k, i in SAMPEL.items()]).set_index("Kelas"))
+    st.dataframe(pd.DataFrame([{"ID citra": k, "Nama file / kelas": NAMA[str(k)], "dtype": str(i.dtype), "shape": str(i.shape),
+                                "min": int(i.min()), "max": int(i.max())} for k, i in SAMPEL.items()]).set_index("ID citra"))
 
 
 def sec_hist():
@@ -427,7 +433,7 @@ def sec_hist():
 def sec_clahe():
     header("2b · CLAHE (Adaptive Histogram Equalization)",
            "Histogram dihitung per area kecil sehingga kontras lokal meningkat, berbeda dari equalization global.")
-    clip = st.slider("Clip limit", 0.005, 0.100, 0.030, 0.005, format="%.3f")
+    clip = st.slider("Clip limit", 0.001, 0.050, 0.010, 0.001, format="%.3f")
     hasil = clahe_semua(clip)
     fig, axes = plt.subplots(2, len(hasil), figsize=(3.2 * len(hasil), 7))
     for j, (k, c) in enumerate(hasil.items()):
@@ -506,9 +512,9 @@ def sec_noise():
            "Citra grayscale diberi tiga jenis noise lalu difilter (Mean, Gaussian, Median, Min, Max; kernel 3×3).")
     with st.expander("⚙️ Parameter noise (nilai awal sama dengan notebook)"):
         c = st.columns(3)
-        sp = c[0].slider("Salt & pepper (proporsi)", 0.01, 0.20, 0.05, 0.01)
-        sg = c[1].slider("Gaussian (σ)", 5, 60, 20)
-        sv = c[2].slider("Speckle (varians)", 0.01, 0.20, 0.04, 0.01)
+        sp = c[0].slider("Salt & pepper (proporsi)", 0.01, 0.20, 0.03, 0.01)
+        sg = c[1].slider("Gaussian (σ)", 5, 60, 10)
+        sv = c[2].slider("Speckle (varians)", 0.01, 0.20, 0.02, 0.01)
     gray = ke_gray(SAMPEL[kelas])
     noisy, hasil, tabel = uji_noise(kelas, sp, sg, sv)
 
@@ -617,7 +623,7 @@ def sec_hair():
             "4. **Remove small objects** + dilasi (dibatasi di dalam kandidat) agar helai tertutup penuh.\n"
             "5. **Apply mask**: piksel rambut diganti hasil *closing* tiap channel RGB.")
     c1, c2 = st.columns([3, 1])
-    ambang = c1.slider("Ambang black-hat (nilai awal notebook = 14)", 5, 40, 14)
+    ambang = c1.slider("Ambang black-hat (nilai awal notebook = 14)", 5, 40, 10)
     semua = c2.toggle("Semua kelas")
     ks = list(SAMPEL) if semua else [kelas]
     n = len(ks)
@@ -840,54 +846,107 @@ def sec_ukur():
 
 
 PAGES = {
-    "Data & Contoh Citra": sec_data,
-    "Histogram & Equalization": sec_hist,
-    "CLAHE": sec_clahe,
-    "Filtering: Teori & Contoh": sec_teori,
-    "Uji Filter terhadap Noise": sec_noise,
-    "Mean vs Median": sec_cmp,
-    "Hair Removal": sec_hair,
-    "Segmentasi Lesi": sec_seg,
-    "Labeling & Region Properties": sec_ukur,
+    "📂 1 · Data & Contoh Citra": sec_data,
+    "📊 2 · Histogram & Equalization": sec_hist,
+    "🔆 2b · CLAHE": sec_clahe,
+    "🧮 3 · Filtering: Teori & Contoh": sec_teori,
+    "📡 3.2 · Uji Filter terhadap Noise": sec_noise,
+    "⚖️ 3.3 · Mean vs Median": sec_cmp,
+    "💈 4 · Hair Removal": sec_hair,
+    "🎯 5 · Segmentasi Lesi": sec_seg,
+    "🏷️ 6 · Labeling & Region Properties": sec_ukur,
 }
 
 # ============================================================================
 # Sidebar, pemuatan data, dan routing halaman
 # ============================================================================
+def baca_gambar_upload(uploaded_files):
+    """Baca gambar ISIC langsung dari uploader; mendukung gambar tunggal, banyak gambar, dan ZIP."""
+    gambar = []
+    ekstensi_gambar = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff")
+    for file in uploaded_files or []:
+        nama_file = file.name
+        isi = file.getvalue()
+        if nama_file.lower().endswith(".zip"):
+            try:
+                with zipfile.ZipFile(io.BytesIO(isi)) as arsip:
+                    for nama_dalam_zip in arsip.namelist():
+                        if nama_dalam_zip.lower().endswith(ekstensi_gambar) and not Path(nama_dalam_zip).name.startswith("."):
+                            try:
+                                with Image.open(io.BytesIO(arsip.read(nama_dalam_zip))) as im:
+                                    gambar.append((Path(nama_dalam_zip).name, np.asarray(im.convert("RGB"), dtype=np.uint8)))
+                            except Exception:
+                                continue
+            except zipfile.BadZipFile:
+                st.warning(f"File {nama_file} bukan ZIP yang valid dan dilewati.")
+        elif nama_file.lower().endswith(ekstensi_gambar):
+            try:
+                with Image.open(io.BytesIO(isi)) as im:
+                    gambar.append((Path(nama_file).name, np.asarray(im.convert("RGB"), dtype=np.uint8)))
+            except Exception as exc:
+                st.warning(f"Gambar {nama_file} tidak dapat dibaca: {exc}")
+    # ID numerik dipakai agar kompatibel dengan seluruh fungsi analisis yang sudah ada.
+    sampel, nama = {}, {}
+    for idx, (nama_file, arr) in enumerate(gambar):
+        sampel[idx] = arr
+        nama[str(idx)] = nama_file
+    return sampel, nama
+
+
 with st.sidebar:
-    st.markdown("## 🔬 DermaMNIST")
-    st.caption("Pengolahan Citra Lesi Kulit · RGB_revisi.ipynb")
+    st.markdown("## 🔬 Analisis Citra Lesi Kulit")
+    st.caption("Histogram, CLAHE, filtering, hair removal, segmentasi, dan labeling")
     menu = st.radio("Navigasi", list(PAGES), label_visibility="collapsed")
     st.divider()
     slot = st.container()
-    with st.expander("📁 Dataset"):
-        path = st.text_input("Lokasi dermamnist_224.npz", DEFAULT_PATH)
+    with st.expander("📁 Dataset / Upload ISIC", expanded=True):
+        uploaded_files = st.file_uploader(
+            "Upload gambar ISIC (JPG, PNG, TIFF, WEBP) atau ZIP berisi gambar",
+            type=["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "zip"],
+            accept_multiple_files=True,
+            help="Bisa memilih satu gambar, beberapa gambar sekaligus, atau file ZIP berisi gambar ISIC."
+        )
+        st.caption("Jika tidak ada gambar yang diunggah, aplikasi menggunakan dataset NPZ lokal seperti sebelumnya.")
+        path = st.text_input("Lokasi dataset NPZ (opsional)", DEFAULT_PATH)
 
-if not Path(path).is_file():
-    st.error(f"File dataset tidak ditemukan: `{path}`")
-    st.write("Perbaiki lokasi file di sidebar, atau unduh otomatis ke folder `~/.medmnist` dengan tombol berikut.")
-    if st.button("⬇️ Unduh DermaMNIST 224 (medmnist)"):
-        try:
-            from medmnist import DermaMNIST
-            with st.spinner("Mengunduh dataset..."):
-                DermaMNIST(split="train", download=True, size=224)
-            st.rerun()
-        except ImportError:
-            st.warning("Library `medmnist` belum terpasang: `pip install medmnist`.")
-    st.stop()
+# Jika ada upload ISIC, seluruh halaman analisis menggunakan citra hasil upload.
+# Jika tidak, mekanisme dataset NPZ lama tetap tersedia.
+if uploaded_files:
+    if st.session_state.get("_data_source") != "upload":
+        st.cache_data.clear()
+        st.session_state["_data_source"] = "upload"
+    upload_hash = hashlib.sha256(b"".join(f.name.encode("utf-8") + f.getvalue() for f in uploaded_files)).hexdigest()
+    if st.session_state.get("_upload_hash") != upload_hash:
+        st.cache_data.clear()
+        st.session_state["_upload_hash"] = upload_hash
+    SAMPEL, NAMA = baca_gambar_upload(uploaded_files)
+    if not SAMPEL:
+        st.error("Tidak ada gambar yang berhasil dibaca. Pastikan file berisi gambar ISIC berformat JPG/PNG/TIFF/WEBP atau ZIP gambar.")
+        st.stop()
+    sumber_data = "ISIC (upload)"
+else:
+    if st.session_state.get("_data_source") != "npz":
+        st.cache_data.clear()
+        st.session_state["_data_source"] = "npz"
+    if not Path(path).is_file():
+        st.error(f"Dataset NPZ tidak ditemukan: `{path}`. Upload gambar ISIC di sidebar atau masukkan lokasi file NPZ yang tersedia.")
+        st.stop()
+    if st.session_state.setdefault("_path", path) != path:
+        st.cache_data.clear()
+        st.session_state["_path"] = path
+    SAMPEL, NAMA = load_sampel(path), get_labels()
+    sumber_data = "DermaMNIST"
 
-if st.session_state.setdefault("_path", path) != path:  # dataset diganti -> buang cache lama
-    st.cache_data.clear()
-    st.session_state["_path"] = path
-
-SAMPEL, NAMA = load_sampel(path), get_labels()
 with slot:
-    kelas = st.selectbox("Pilih kelas", list(SAMPEL), format_func=lambda k: f"Kelas {k}: {NAMA[str(k)]}")
+    kelas = st.selectbox(
+        "Pilih citra untuk dianalisis", list(SAMPEL),
+        format_func=lambda k: f"Citra {k}: {NAMA[str(k)]}"
+    )
 
 st.markdown(
     f"""<div class="hero"><h1>🔬 Pengolahan Citra Lesi Kulit</h1>
-<p>DermaMNIST (224 × 224 RGB): histogram, equalization, filtering, hair removal, segmentasi, labeling, dan pengukuran lesi.</p>
-<span class="chip">Kelas {kelas}: {NAMA[str(kelas)]}</span><span class="chip">{menu}</span></div>""",
+<p>{sumber_data}: histogram RGB, equalization, CLAHE, filtering, hair removal, segmentasi, labeling, dan pengukuran lesi.</p>
+<span class="chip">Citra {kelas}: {NAMA[str(kelas)]}</span><span class="chip">{menu}</span></div>""",
     unsafe_allow_html=True,
 )
 PAGES[menu]()
