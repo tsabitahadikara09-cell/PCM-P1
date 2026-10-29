@@ -379,7 +379,7 @@ def mean_scratch(kelas):
 # Halaman-halaman (sesuai bagian pada notebook)
 # ============================================================================
 def sec_data():
-    header("1 · Data & Contoh Citra", "Satu citra pertama dari setiap kelas penyakit pada train set DermaMNIST.")
+    header("Data & Contoh Citra", "Satu citra pertama dari setiap kelas penyakit pada train set DermaMNIST.")
     contoh = next(iter(SAMPEL.values()))
     m = st.columns(4)
     m[0].metric("Jumlah kelas", len(SAMPEL))
@@ -401,12 +401,12 @@ def sec_data():
 
 
 def sec_hist():
-    header("2 · Histogram RGB & Equalization",
+    header("Histogram RGB & Equalization",
            "Tiap channel dipisah → citra grayscale + histogram, lalu diequalisasi memakai cumulative histogram (CDF).")
     st.latex(r"I_{eq}(u,v)=\frac{CDF\left(I(u,v)\right)}{CDF_{max}}\times 255")
     img, nama = SAMPEL[kelas], f"Kelas {kelas}: {NAMA[str(kelas)]}"
     eq = equalize_rgb(img)
-    t1, t2, t3 = st.tabs(["🖼️ Citra asli", "✨ Equalized RGB", "📋 Brightness & contrast"])
+    t1, t2, t3 = st.tabs(["Citra asli", "Equalized RGB", "Brightness & contrast"])
     with t1:
         show(plot_split_channel(img, f"Citra Asli\n{nama}", "Histogram"))
     with t2:
@@ -425,7 +425,7 @@ def sec_hist():
 
 
 def sec_clahe():
-    header("2b · CLAHE (Adaptive Histogram Equalization)",
+    header("CLAHE",
            "Histogram dihitung per area kecil sehingga kontras lokal meningkat, berbeda dari equalization global.")
     clip = st.slider("Clip limit", 0.005, 0.100, 0.010, 0.005, format="%.3f")
     hasil = clahe_semua(clip)
@@ -442,7 +442,7 @@ def sec_clahe():
 
 
 def sec_teori():
-    header("3 · Filtering: Teori & Contoh Perhitungan",
+    header("Filtering: Teori & Contoh Perhitungan",
            "Filter menggabungkan nilai sebuah piksel dengan piksel-piksel tetangganya.")
     st.markdown("""
 | Jenis | Filter | Cara kerja | Fungsi Python |
@@ -453,7 +453,7 @@ def sec_teori():
 | Non-linear | **Min** | nilai terkecil tetangga, menghilangkan *salt noise* | `ndi.minimum_filter` |
 | Non-linear | **Max** | nilai terbesar tetangga, menghilangkan *pepper noise* | `ndi.maximum_filter` |
 """)
-    st.markdown("##### 📐 Parameter evaluasi (*f* = citra asli, *g* = hasil filter)")
+    st.markdown("##### Parameter evaluasi (*f* = citra asli, *g* = hasil filter)")
     rumus = [("MSE", r"\frac{1}{MN}\sum\sum (f-g)^2", "makin kecil, makin mirip asli"),
              ("PSNR", r"10\log_{10}\frac{255^2}{MSE}", "makin besar, makin baik"),
              ("ENL", r"\frac{M^2}{SD^2}", "makin besar, noise makin lemah"),
@@ -502,9 +502,9 @@ def sec_teori():
 
 
 def sec_noise():
-    header("3.2 · Uji Filter terhadap Noise",
+    header("Uji Filter terhadap Noise",
            "Citra grayscale diberi tiga jenis noise lalu difilter (Mean, Gaussian, Median, Min, Max; kernel 3×3).")
-    with st.expander("⚙️ Parameter noise (nilai awal sama dengan notebook)"):
+    with st.expander("Parameter noise (nilai awal sama dengan notebook)"):
         c = st.columns(3)
         sp = c[0].slider("Salt & pepper (proporsi)", 0.01, 0.20, 0.05, 0.01)
         sg = c[1].slider("Gaussian (σ)", 5, 60, 20)
@@ -512,13 +512,13 @@ def sec_noise():
     gray = ke_gray(SAMPEL[kelas])
     noisy, hasil, tabel = uji_noise(kelas, sp, sg, sv)
 
-    st.markdown("##### 🏆 Filter dengan PSNR tertinggi")
+    st.markdown("##### Filter dengan PSNR tertinggi")
     for col, (nn, t) in zip(st.columns(3), tabel[tabel["Filter"] != "Tanpa filter"].groupby("Noise", sort=False)):
         best = t.loc[t["PSNR (dB)"].idxmax()]
         col.metric(nn, best["Filter"])
         col.caption(f"PSNR = {best['PSNR (dB)']:.2f} dB")
 
-    t1, t2, t3 = st.tabs(["🖼️ Citra ber-noise", "🧪 Hasil filter", "📋 Tabel metrik"])
+    t1, t2, t3 = st.tabs(["Citra ber-noise", "Hasil filter", "Tabel metrik"])
     with t1:
         fig, axes = plt.subplots(1, 4, figsize=(18, 5))
         axes[0].imshow(gray, cmap="gray", vmin=0, vmax=255)
@@ -544,7 +544,7 @@ def sec_noise():
         st.dataframe(tabel.round(3).replace([np.inf, -np.inf], np.nan).set_index(["Noise", "Filter"]))
 
     st.markdown("---")
-    if st.toggle("📊 Tampilkan rekap seluruh kelas (lebih lama)"):
+    if st.toggle("Tampilkan rekap seluruh kelas (lebih lama)"):
         semua = []
         for k in SAMPEL:
             t = uji_noise(k, sp, sg, sv)[2].copy()
@@ -564,7 +564,7 @@ def sec_noise():
 
 
 def sec_cmp():
-    header("3.3 · Mean vs Median sebelum Segmentasi",
+    header("Mean vs Median sebelum Segmentasi",
            "Denoising citra asli (jendela 7×7) agar nilai keabuan lesi dan kulit lebih seragam sebelum Otsu.")
     gray = ke_gray(SAMPEL[kelas])
     hasil, patch, lesi = filter_7x7(gray), cari_patch_seragam(gray), daerah_lesi_kasar(gray)
@@ -607,9 +607,9 @@ def sec_cmp():
 
 
 def sec_hair():
-    header("4 · Hair Removal (Morphological Filtering)",
+    header("Hair Removal (Morphological Filtering)",
            "Rambut berupa garis gelap, tipis, dan panjang; dihilangkan sebelum segmentasi.")
-    with st.expander("🧩 Langkah-langkah"):
+    with st.expander("Langkah-langkah"):
         st.markdown(
             "1. **Kanal V = max(R, G, B)** → **black-hat** (closing − citra, SE *disk* r = 5) menonjolkan struktur gelap tipis.\n"
             "2. **Threshold** black-hat → kandidat rambut, **dilasi 1 piksel**.\n"
@@ -637,7 +637,7 @@ def sec_hair():
 
 
 def sec_seg():
-    header("5 · Segmentasi Lesi",
+    header("Segmentasi Lesi",
            "Hair removal → grayscale → median 7×7 → Otsu → morphological filtering → pemilihan objek lesi.")
     s = segmentasi_lesi(kelas)
     m = st.columns(4)
@@ -645,7 +645,7 @@ def sec_seg():
     m[1].metric("Luas lesi", f"{int(s['lesi'].sum())} px²")
     m[2].metric("Lesi dari citra", f"{s['lesi'].mean() * 100:.1f}%")
     m[3].metric("Rambut terdeteksi", f"{s['mask_rambut'].mean() * 100:.1f}%")
-    with st.expander("🎯 Cara memilih objek lesi"):
+    with st.expander("Cara memilih objek lesi"):
         st.latex(r"skor = luas \times (1-\bar{d})^2 \times (1-t)^4")
         st.caption("d̄ = jarak rata-rata piksel objek ke pusat citra (0 = pusat, 1 = sudut), t = porsi tepi citra yang "
                    "disentuh objek. Lesi biasanya di tengah, sedangkan bayangan di pinggir (vignetting) skornya kecil.")
@@ -720,10 +720,10 @@ MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
 def sec_ukur():
-    header("6 · Labeling & Region Properties",
+    header("Labeling & Region Properties",
            "Setiap objek hasil segmentasi diberi label (`measure.label`), dihitung propertinya "
            "(`measure.regionprops_table`), lalu tabelnya di-export ke CSV/Excel. Satuan: piksel (citra 224 × 224).")
-    t1, t2, t3 = st.tabs(["🏷️ 6.1 Labeling objek", "📏 6.2 Luas & diameter lesi", "💾 6.3 Rekap & export"])
+    t1, t2, t3 = st.tabs(["Labeling objek", "Luas & diameter lesi", "Rekap & export"])
 
     # ---------------- 6.1 Labeling objek ----------------
     with t1:
