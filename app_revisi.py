@@ -427,7 +427,7 @@ def sec_hist():
 def sec_clahe():
     header("2b · CLAHE (Adaptive Histogram Equalization)",
            "Histogram dihitung per area kecil sehingga kontras lokal meningkat, berbeda dari equalization global.")
-    clip = st.slider("Clip limit", 0.005, 0.100, 0.030, 0.005, format="%.3f")
+    clip = st.slider("Clip limit", 0.005, 0.100, 0.010, 0.005, format="%.3f")
     hasil = clahe_semua(clip)
     fig, axes = plt.subplots(2, len(hasil), figsize=(3.2 * len(hasil), 7))
     for j, (k, c) in enumerate(hasil.items()):
